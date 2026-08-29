@@ -17,8 +17,6 @@ typedef struct {
     pair ** pairs;
 } map;
 
-size_t sizeof_char_p = sizeof(char *);
-
 map amap () {
     map a;
     a.length = 0;
@@ -33,6 +31,7 @@ void delete (map * a, char * key) {
             for (int j = i; j < a->length; j++) {
                 a->pairs[j] = a->pairs[j + 1];
             }
+            break;
         }
     }
 }
@@ -46,39 +45,30 @@ char * get (map * a, char * key) {
     return 0;
 }
 
+int sizeof_char_p = sizeof(char *);
+int sizeof_char_p2 = sizeof(char *) * 2;
+
 void set (map * a, char * key, char * value) {
     delete(a, key);
-    pair * p = malloc(sizeof_char_p * 2);
+    pair * p = malloc(sizeof_char_p2);
     p->key = key;
     p->value = value;
-    a->pairs = realloc(a->pairs, (a->length + 1) * (sizeof_char_p * 2));
-    a->pairs[a->length] = p;
-    a->length++;
+    a->pairs = realloc(a->pairs, (a->length + 1) * sizeof_char_p2);
+    a->pairs[a->length++] = p;
 }
 
 char * replaces (char * str, char * past, char * next) {
-    int a = 0;
-    int i = strlen(past);
-    int j = strlen(next);
-    char * p = str;
-    while ((p = strstr(p, past))) {
-        a++;
-        p += i;
+    char * p = strstr(str, past);
+    int len1 = strlen(past);
+    int len2 = strlen(next);
+    while (p) {
+        if (len1 != len2) {
+            memmove(p + len2, p + len1, strlen(p + len1) + 1);
+        }
+        memcpy(p, next, len2);
+        p = strstr(str, past);
     }
-    char * result = malloc(strlen(str) + a * (j - i) + 1);
-    char * current = result;
-    p = str;
-    while ((p = strstr(p, past))) {
-        int length = p - str;
-        strncpy(current, str, length);
-        current += length;
-        strcpy(current, next);
-        current += j;
-        p += i;
-        str = p;
-    }
-    strcpy(current, str);
-    return result;
+    return str;
 }
 
 char * lstrip (char * str) {
@@ -90,12 +80,12 @@ char * lstrip (char * str) {
 
 char * rstrip (char * str) {
     int i = -1;
-    for (int j = 0; str[j] != 0; j++) {
+    for (int j = 0; str[j] != '\0'; j++) {
         if (str[j] != '\t' && str[j] != ' ') {
             i = j;
         }
     }
-    str[i + 1] = 0;
+    str[i + 1] = '\0';
     return str;
 }
 
@@ -126,7 +116,7 @@ char ** splits (char * str, char * delimiter, int * length) {
         i++;
         token = strtok(0, delimiter);
     }
-    char ** array = malloc(i * sizeof_char_p);
+    char ** array = malloc((i + 1) * sizeof_char_p);
     if (i == 0) {
         array[i] = str;
         return array;
@@ -153,7 +143,7 @@ bool starts_with (char * str, char * prefix) {
 char * substr (char * str, int start, int length) {
     char * sub = malloc(length * sizeof_char_p);
     memcpy(sub, str + start, length);
-    sub[length] = 0;
+    sub[length] = '\0';
     return sub;
 }
 
@@ -168,10 +158,9 @@ char * resolve (char * f, char * file) {
     char i = f[0];
     if (i != '.' && i != '/') {
         int last = strrchr(file, '/') - file;
-        char * str = malloc(last + strlen(f) + 1);
-        strcpy(str, substr(file, 0, last));
-        strcat(str, "/");
-        strcat(str, f);
+        int length = last + strlen(f) + 2;
+        char * str = malloc(length);
+        snprintf(str, length, "%s%s%s", substr(file, 0, last), "/", f);
         f = str;
     } else if (strncmp(f, "../", 3) == 0) {
         while (strncmp(f, "../", 3) == 0) {
@@ -179,13 +168,13 @@ char * resolve (char * f, char * file) {
             file = substr(file, 0, strrchr(file, '/') - file);
         }
         int last = strrchr(file, '/') - file;
-        char * str = malloc(last + strlen(f) + 1);
-        strcpy(str, substr(file, 0, last));
-        strcat(str, "/");
-        strcat(str, f);
+        int length = last + strlen(f) + 2;
+        char * str = malloc(length);
+        snprintf(str, length, "%s%s%s", substr(file, 0, last), "/", f);
         f = str;
     }
     if (strcmp(f + strlen(f) - 3, ".js") != 0) {
+        f = realloc(f, strlen(f) + 4);
         strcat(f, ".js");
     }
     return f;
@@ -196,22 +185,20 @@ char * replace (char * text, char * past, char * next) {
     int i = strlen(past);
     int j = strlen(next);
     text = realloc(text, strlen(text) * j / i);
-    char * ap = strstr(text, past);
-    while (ap) {
-        a = ap - text;
+    char * p = strstr(text, past);
+    while (p) {
+        a = p - text;
         if (strlen(text) < a + i + 1) {
             return text;
         }
         char previous = text[a - 1];
         if (strchr(base64, text[a + i]) || strchr(base64, previous) || strchr("\"'.", previous)) {
-            a += i;
-            ap = strstr(text + a, past);
+            p = strstr(text + a + i, past);
             continue;
         }
-        memmove(text + a + j, ap + i, strlen(text + a + i) + 1);
+        memmove(text + a + j, p + i, strlen(text + a + i) + 1);
         memcpy(text + a, next, j);
-        a += j;
-        ap = strstr(text + a, past);
+        p = strstr(text + a + j, past);
     }
     return text;
 }
@@ -222,13 +209,13 @@ void parse (char * file, map * modules, map * texts) {
         set(texts, file, "");
         return;
     }
-    fseek(f, 0, 2);
-    long length = ftell(f);
+    fseek(f, 0, SEEK_END);
+    int length = ftell(f);
     rewind(f);
     char * text = malloc(length + 1);
     fread(text, 1, length, f);
-    text[length] = 0;
     fclose(f);
+    text[length] = '\0';
     while (strstr(text, " \n")) {
         text = replaces(text, " \n", "\n");
     }
@@ -238,7 +225,7 @@ void parse (char * file, map * modules, map * texts) {
     char * lines = text;
     bool remove = false;
     text = malloc(strlen(text) + 2);
-    text[0] = 0;
+    text[0] = '\0';
     char * token = strtok(lines, "\n");
     while (token) {
         char * line = token;
@@ -250,10 +237,9 @@ void parse (char * file, map * modules, map * texts) {
         if (!remove && ip && !strstr(line, "//*")) {
             char * jp = strstr(line, "*/");
             if (jp) {
-                char * str = malloc(strlen(line) + 1);
-                strcpy(str, substr(line, 0, ip - line));
-                strcat(str, " ");
-                strcat(str, substrs(line, jp - line + 2));
+                length = strlen(line) + 2;
+                char * str = malloc(length);
+                snprintf(str, length, "%s%s%s", substr(line, 0, ip - line), " ", substrs(line, jp - line + 2));
                 line = str;
             } else {
                 line = substr(line, 0, ip - line);
@@ -298,8 +284,8 @@ void parse (char * file, map * modules, map * texts) {
         text = substrs(text, i);
         ip = strstr(text, "from");
         i = ip - text;
-        char * jp = strstr(text, "\"");
-        char * kp = strstr(text, "'");
+        char * jp = strchr(text, '"');
+        char * kp = strchr(text, '\'');
         char ** names = malloc(sizeof_char_p);
         int names_length = 0;
         int names_size = 1;
@@ -339,10 +325,10 @@ void parse (char * file, map * modules, map * texts) {
         } else {
             i = 0;
         }
-        char f[2] = {text[i], 0};
-        if (strcmp(f, "\"") == 0 || strcmp(f, "'") == 0) {
+        char f = text[i];
+        if (f == '"' || f == '\'') {
             text = substrs(text, i + 1);
-            ip = strstr(text, f);
+            ip = strchr(text, f);
             char * f = resolve(substr(text, 0, ip - text), file);
             char * imported = get(& files, f);
             if (!imported) {
@@ -379,7 +365,7 @@ void parse (char * file, map * modules, map * texts) {
                 return;
             } else {
                 bool import = true;
-                int length = 0;
+                length = 0;
                 char ** mods = splits(mods_string, "\n", & length);
                 for (int j = 0; j < length; j++) {
                     if (strcmp(file, mods[j]) == 0) {
@@ -409,7 +395,7 @@ void parse (char * file, map * modules, map * texts) {
             }
         }
         char * names = "";
-        if ((ip = strstr(text, "\n"))) {
+        if ((ip = strchr(text, '\n'))) {
             names = substr(text, 0, ip - text);
         }
         i = 0;
@@ -417,15 +403,15 @@ void parse (char * file, map * modules, map * texts) {
             i++;
         }
         char ** split = malloc(sizeof_char_p);
-        int length = 0;
+        length = 0;
         if (i < strlen(names) && names[i] == '{') {
             names = substrs(names, i + 1);
-            ip = strstr(names, "}");
+            ip = strchr(names, '}');
             split = splits(substr(names, 0, ip - names), ",", & length);
         } else {
-            ip = strstr(names, "(");
+            ip = strchr(names, '(');
             i = ip - names;
-            char * jp = strstr(names, "=");
+            char * jp = strchr(names, '=');
             int j = jp - names;
             if (!jp || (i < j && ip)) {
                 split[length++] = names;
@@ -435,12 +421,12 @@ void parse (char * file, map * modules, map * texts) {
                     split = realloc(split, (length + 1) * sizeof_char_p);
                     split[length++] = substr(names, 0, j);
                     names = substrs(names, j);
-                    jp = strstr(names, ",");
+                    jp = strchr(names, ',');
                     if (!jp) {
                         break;
                     }
                     names = substrs(names, jp - names);
-                    jp = strstr(names, "=");
+                    jp = strchr(names, '=');
                 }
             }
         }
@@ -460,15 +446,14 @@ void parse (char * file, map * modules, map * texts) {
                 }
             }
             for (int j = 0; j < 6; j++) {
-                char * jp = strstr(name, (char [2]) {defines[j], 0});
+                char * jp = strchr(name, defines[j]);
                 if (jp) {
                     name = substr(name, 0, jp - name);
                 }
             }
-            char * str = malloc(strlen(f) + strlen(name) + 2);
-            strcpy(str, f);
-            strcat(str, name);
-            strcat(str, "\n");
+            int len = strlen(f) + strlen(name) + 2;
+            char * str = malloc(len);
+            snprintf(str, len, "%s%s%s", f, name, "\n");
             f = str;
         }
         set(& files, file, f);
@@ -478,7 +463,7 @@ void parse (char * file, map * modules, map * texts) {
     for (int i = 0, files_length = files.length; i < files_length; i++) {
         pair * p = files.pairs[i];
         char * f = p->key;
-        int length = strlen(f);
+        length = strlen(f);
         char * path = substr(f, 0, length - 3);
         for (int j = 0; j < length; j++) {
             if (!strchr(base64, path[j])) {
@@ -489,16 +474,15 @@ void parse (char * file, map * modules, map * texts) {
         char ** names = splits(p->value, "\n", & length);
         for (int j = 0; j < length; j++) {
             char * name = names[j];
-            char * next = malloc(strlen(name) + strlen(path) + 2);
-            strcpy(next, name);
-            strcat(next, "_");
-            strcat(next, path);
+            int len = strlen(name) + strlen(path) + 2;
+            char * next = malloc(len);
+            snprintf(next, len, "%s%s%s", name, "_", path);
             text = replace(text, name, next);
         }
     }
     lines = text;
     text = malloc(strlen(text) + 1);
-    text[0] = 0;
+    text[0] = '\0';
     token = strtok(lines, "\n");
     while (token) {
         char * line = token;
@@ -547,8 +531,7 @@ void build (char * file, char * output) {
         bool import = true;
         for (int i = 0; i < imported_length; i++) {
             if (strcmp(imported[i], file) == 0) {
-                memmove(& imports[0], & imports[1], (imports_length - 1) * sizeof_char_p);
-                imports_length--;
+                memmove(& imports[0], & imports[1], --imports_length * sizeof_char_p);
                 import = false;
                 break;
             }
