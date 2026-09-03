@@ -1,4 +1,4 @@
-// clang bundle.c -o bundle.out && ./bundle.out a/a.js a/y.js
+// cc bundle.c -o bundle.out && ./bundle.out a/a.js a/y.js
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -57,16 +57,15 @@ void set (map * a, char * key, char * value) {
     a->pairs[a->length++] = p;
 }
 
-char * replaces (char * str, char * past, char * next) {
-    char * p = strstr(str, past);
+char * replace (char * str, char * past, char * next) {
     int len1 = strlen(past);
     int len2 = strlen(next);
-    while (p) {
+    char * p;
+    while ((p = strstr(str, past))) {
         if (len1 != len2) {
             memmove(p + len2, p + len1, strlen(p + len1) + 1);
         }
         memcpy(p, next, len2);
-        p = strstr(str, past);
     }
     return str;
 }
@@ -180,7 +179,7 @@ char * resolve (char * f, char * file) {
     return f;
 }
 
-char * replace (char * text, char * past, char * next) {
+char * substitute (char * text, char * past, char * next) {
     int a = 0;
     int i = strlen(past);
     int j = strlen(next);
@@ -191,8 +190,7 @@ char * replace (char * text, char * past, char * next) {
         if (strlen(text) < a + i + 1) {
             return text;
         }
-        char previous = text[a - 1];
-        if (strchr(base64, text[a + i]) || strchr(base64, previous) || strchr("\"'.", previous)) {
+        if (strchr(base64, text[a + i]) || (a > 0 && (strchr(base64, text[a - 1]) || strchr("\"'.", text[a - 1])))) {
             p = strstr(text + a + i, past);
             continue;
         }
@@ -217,10 +215,10 @@ void parse (char * file, map * modules, map * texts) {
     fclose(f);
     text[length] = '\0';
     while (strstr(text, " \n")) {
-        text = replaces(text, " \n", "\n");
+        text = replace(text, " \n", "\n");
     }
     while (strstr(text, "\n\n")) {
-        text = replaces(text, "\n\n", "\n");
+        text = replace(text, "\n\n", "\n");
     }
     char * lines = text;
     bool remove = false;
@@ -271,11 +269,13 @@ void parse (char * file, map * modules, map * texts) {
     char * ip = strstr(text, "import ");
     while (ip) {
         int i = ip - text;
-        char t = text[i - 1];
-        if (i != 0 && t != '\t' && t != '\n' && t != ' ') {
-            text = substrs(text, i + 6);
-            ip = strstr(text, "import ");
-            continue;
+        if (i != 0) {
+            char j = text[i - 1];
+            if (j != '\t' && j != '\n' && j != ' ') {
+                text = substrs(text, i + 6);
+                ip = strstr(text, "import ");
+                continue;
+            }
         }
         i += 6;
         while (text[i] == ' ') {
@@ -416,7 +416,7 @@ void parse (char * file, map * modules, map * texts) {
             if (!jp || (i < j && ip)) {
                 split[length++] = names;
             } else {
-                while (jp) {
+                while (jp && strchr(jp, '>') - jp != 1) {
                     j = jp - names;
                     split = realloc(split, (length + 1) * sizeof_char_p);
                     split[length++] = substr(names, 0, j);
@@ -477,7 +477,7 @@ void parse (char * file, map * modules, map * texts) {
             int len = strlen(name) + strlen(path) + 2;
             char * next = malloc(len);
             snprintf(next, len, "%s%s%s", name, "_", path);
-            text = replace(text, name, next);
+            text = substitute(text, name, next);
         }
     }
     lines = text;

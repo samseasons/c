@@ -1,4 +1,4 @@
-// clang serve.c -o serve.out && ./serve.out a 1234
+// cc serve.c -o serve.out && ./serve.out a 1234
 
 #include <netinet/in.h>
 #include <stdio.h>
@@ -18,6 +18,7 @@ void serve (char * folder, int port) {
     int i = 1;
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, & i, sizeof(i));
     struct sockaddr_in sock;
+    sock.sin_family = AF_INET;
     sock.sin_port = htons(port);
     socklen_t len = sizeof(sock);
     bind(server, (struct sockaddr *) & sock, len);
@@ -32,25 +33,21 @@ void serve (char * folder, int port) {
         char file[length + 1];
         strncpy(file, start, length);
         file[length] = '\0';
-        char * p = strstr(file, "%20");
-        while (p) {
+        char * p;
+        while ((p = strstr(file, "%20"))) {
             memcpy(p, " ", 1);
             memmove(p + 1, p + 3, strlen(p + 3) + 1);
-            p = strstr(file, "%20");
         }
         length = strlen(folder) + strlen(file) + 1;
         char * path = malloc(length);
-        snprintf(path, length, "%s%s", folder, file);
         char type[23];
-        FILE * f = fopen(path, "r");
-        if (file[0] != '/' || strcmp(file, "/") == 0 || !f) {
-            fclose(f);
-            strcpy(type, "text/html");
+        if (file[0] != '/' || strcmp(file, "/") == 0) {
             length = strlen(folder) + 8;
             path = realloc(path, length);
             snprintf(path, length, "%s%s", folder, "/x.html");
-            f = fopen(path, "r");
+            strcpy(type, "text/html");
         } else {
+            snprintf(path, length, "%s%s", folder, file);
             char * extension = strrchr(file, '.') + 1;
             for (i = 0; types[i][0]; i++) {
                 if (strcmp(types[i][0], extension) == 0) {
@@ -59,6 +56,7 @@ void serve (char * folder, int port) {
                 }
             }
         }
+        FILE * f = fopen(path, "r");
         if (f) {
             fseek(f, 0, SEEK_END);
             length = ftell(f);
