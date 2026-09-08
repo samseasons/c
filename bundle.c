@@ -110,10 +110,10 @@ char * first_not_of (char * str) {
 char ** splits (char * str, char * delimiter, int * length) {
     char * buffer = strdup(str);
     int i = 0;
-    char * token = strtok(str, delimiter);
-    while (token) {
+    char * p = strtok(str, delimiter);
+    while (p) {
         i++;
-        token = strtok(0, delimiter);
+        p = strtok(0, delimiter);
     }
     char ** array = malloc((i + 1) * sizeof_char_p);
     if (i == 0) {
@@ -121,10 +121,10 @@ char ** splits (char * str, char * delimiter, int * length) {
         return array;
     }
     i = 0;
-    token = strtok(buffer, delimiter);
-    while (token) {
-        array[i++] = token;
-        token = strtok(0, delimiter);
+    p = strtok(buffer, delimiter);
+    while (p) {
+        array[i++] = p;
+        p = strtok(0, delimiter);
     }
     * length = i;
     return array;
@@ -190,7 +190,7 @@ char * substitute (char * text, char * past, char * next) {
         if (strlen(text) < a + i + 1) {
             return text;
         }
-        if (strchr(base64, text[a + i]) || (a > 0 && (strchr(base64, text[a - 1]) || strchr("\"'.", text[a - 1])))) {
+        if (strchr(base64, text[a + i]) || (a != 0 && (strchr(base64, text[a - 1]) || strchr("\"'.", text[a - 1])))) {
             p = strstr(text + a + i, past);
             continue;
         }
@@ -224,11 +224,10 @@ void parse (char * file, map * modules, map * texts) {
     bool remove = false;
     text = malloc(strlen(text) + 2);
     text[0] = '\0';
-    char * token = strtok(lines, "\n");
-    while (token) {
-        char * line = token;
+    char * line = strtok(lines, "\n");
+    while (line) {
         if (starts_with(lstrip(line), "//")) {
-            token = strtok(0, "\n");
+            line = strtok(0, "\n");
             continue;
         }
         char * ip = strstr(line, "/*");
@@ -249,31 +248,30 @@ void parse (char * file, map * modules, map * texts) {
                 line = substrs(line, ip - line + 2);
                 remove = false;
             } else {
-                token = strtok(0, "\n");
+                line = strtok(0, "\n");
                 continue;
             }
         }
         line = rstrip(line);
-        if (strlen(line) > 0) {
+        if (line) {
             strcat(text, line);
             strcat(text, "\n");
         }
-        token = strtok(0, "\n");
+        line = strtok(0, "\n");
     }
-    char * texta = text;
     map files = amap();
     set(& files, file, "");
     char ** order = malloc(1);
     int order_length = 0;
     int order_size = 1;
-    char * ip = strstr(text, "import ");
-    while (ip) {
+    char * texta = text;
+    char * ip;
+    while ((ip = strstr(text, "import "))) {
         int i = ip - text;
         if (i != 0) {
             char j = text[i - 1];
             if (j != '\t' && j != '\n' && j != ' ') {
                 text = substrs(text, i + 6);
-                ip = strstr(text, "import ");
                 continue;
             }
         }
@@ -345,45 +343,25 @@ void parse (char * file, map * modules, map * texts) {
             }
             set(& files, f, imports);
         }
-        ip = strstr(text, "import ");
     }
-    char * order_string = "";
-    if (order_length > 0) {
-        order_string = malloc(order_size);
-        strcpy(order_string, order[0]);
-        for (int i = 1; i < order_length; i++) {
-            strcat(order_string, "\n");
-            strcat(order_string, order[i]);
-        }
-    }
-    set(modules, file, order_string);
+    char * mods = malloc(order_size);
+    strcpy(mods, "");
+    set(modules, file, "");
     for (int i = 0; i < order_length; i++) {
         char * f = order[i];
         if (!get(texts, f)) {
-            char * mods_string = get(modules, f);
-            if (!mods_string) {
+            strcat(mods, f);
+            strcat(mods, "\n");
+            if (!get(modules, f)) {
+                set(modules, file, mods);
                 return;
-            } else {
-                bool import = true;
-                length = 0;
-                char ** mods = splits(mods_string, "\n", & length);
-                for (int j = 0; j < length; j++) {
-                    if (strcmp(file, mods[j]) == 0) {
-                        import = false;
-                        break;
-                    }
-                }
-                if (import) {
-                    return;
-                }
             }
         }
     }
     char declares[7][9] = {"async", "class", "const", "default", "function", "let", "var"};
     char defines[6] = {'\n', ' ', '(', ',', '.', '['};
-    strcpy(text, texta);
-    ip = strstr(text, "export ");
-    while (ip) {
+    text = texta;
+    while ((ip = strstr(text, "export "))) {
         int i = ip - text;
         text = substrs(text, i + 7);
         for (int j = 0; j < 7; j++) {
@@ -416,17 +394,16 @@ void parse (char * file, map * modules, map * texts) {
             if (!jp || (i < j && ip)) {
                 split[length++] = names;
             } else {
-                while (jp && strchr(jp, '>') - jp != 1) {
-                    j = jp - names;
+                while (jp && names[j + 1] != '>') {
                     split = realloc(split, (length + 1) * sizeof_char_p);
                     split[length++] = substr(names, 0, j);
                     names = substrs(names, j);
-                    jp = strchr(names, ',');
-                    if (!jp) {
+                    if (!(jp = strchr(names, ','))) {
                         break;
                     }
                     names = substrs(names, jp - names);
                     jp = strchr(names, '=');
+                    j = jp - names;
                 }
             }
         }
@@ -435,8 +412,8 @@ void parse (char * file, map * modules, map * texts) {
             char * name = split[i];
             bool subs = true;
             while (strlen(name) && subs) {
-                subs = false;
                 char n = name[0];
+                subs = false;
                 for (int j = 0; j < 6; j++) {
                     if (defines[j] == n) {
                         name = substrs(name, 1);
@@ -457,7 +434,6 @@ void parse (char * file, map * modules, map * texts) {
             f = str;
         }
         set(& files, file, f);
-        ip = strstr(text, "export ");
     }
     text = texta;
     for (int i = 0, files_length = files.length; i < files_length; i++) {
@@ -483,9 +459,8 @@ void parse (char * file, map * modules, map * texts) {
     lines = text;
     text = malloc(strlen(text) + 1);
     text[0] = '\0';
-    token = strtok(lines, "\n");
-    while (token) {
-        char * line = token;
+    line = strtok(lines, "\n");
+    while (line) {
         char * a = first_not_of(line);
         if (strncmp(a, "export default ", 15) == 0) {
             line = substrs(line, 15);
@@ -493,15 +468,15 @@ void parse (char * file, map * modules, map * texts) {
             line = substrs(line, 7);
             a = first_not_of(line);
             if (* a == '{') {
-                token = strtok(0, "\n");
+                line = strtok(0, "\n");
                 continue;
             }
         }
-        if (strlen(line) > 0 && strncmp(a, "import ", 7) != 0) {
+        if (line && strncmp(a, "import ", 7) != 0) {
             strcat(text, line);
             strcat(text, "\n");
         }
-        token = strtok(0, "\n");
+        line = strtok(0, "\n");
     }
     set(texts, file, text);
 }
@@ -526,7 +501,7 @@ void build (char * file, char * output) {
     imports[0] = file;
     map modules = amap();
     map texts = amap();
-    while (imports_length > 0) {
+    while (imports_length != 0) {
         file = imports[0];
         bool import = true;
         for (int i = 0; i < imported_length; i++) {
@@ -542,9 +517,7 @@ void build (char * file, char * output) {
             if (mods_string) {
                 int length = 0;
                 char ** mods = splits(mods_string, "\n", & length);
-                if (length > 0) {
-                    prepend(& imports, & imports_length, mods, length);
-                }
+                prepend(& imports, & imports_length, mods, length);
             }
             if (get(& texts, file)) {
                 imported = realloc(imported, (imported_length + 1) * sizeof_char_p);
